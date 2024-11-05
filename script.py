@@ -41,29 +41,33 @@ def scrape_and_send_email():
     except Exception as e:
         print("Erro ao carregar a página:", e)
 
-    # Extrai o HTML da página renderizada, analisa com BeautifulSoup e encerra o driver
+    # Extrai o HTML da página renderizada, análise com BeautifulSoup e encerra o driver
     html = driver.page_source
     soup = BeautifulSoup(html, 'html.parser')
     driver.quit()
 
-    # Boolean para separar os livros em discouto dos livros mais vendidos e Lista dos livros
-    in_offer_section = False
-    offer_books = [] 
+    # Extração da classe 'a-offscreen' que contém título e preço depois e antes do desconto
+    all_offscreen_elements = soup.find_all('span', class_='a-offscreen')
 
-    # Extração dos títulos dos livros
-    books = soup.find_all('span', class_='a-truncate-full a-offscreen')
-    for book in books:
-        title = book.get_text(strip=True).replace('\u200f', '').replace('\u200e', '')
-        if title == "Livros em Oferta":
-            in_offer_section = True
-            continue
-        if in_offer_section:
-            offer_books.append(title)
+    # Array de tuplas para guardar os elementos
+    books = []
 
-    with open('info.txt', 'r') as info:
-        sender_email = info.readline().strip()
-        receiver_email = info.readline().strip()
-        password = info.readline().strip()
+    # Loop para pegar cada elemento da classe `a-offscreen`
+    for i in range(1, 91, 3):
+        try:
+            # Extraia o título, preço com desconto e preço original em sequência
+            title = all_offscreen_elements[i].get_text(strip=True)
+            discount_price = all_offscreen_elements[i + 1].get_text(strip=True)
+            original_price = all_offscreen_elements[i + 2].get_text(strip=True)
+            
+            # Armazena o título e os preços no vetor de livros como uma tupla
+            books.append((title, discount_price, original_price))
+            
+            # Exibe o resultado para verificação
+            print(f"Título: {title}\nPreço: {original_price} -> {discount_price}\n")
+
+        except IndexError:
+            print("Elemento faltando, verifique a estrutura da página.")
 
     # Lê o arquivo com dados sensíveis
     try:
@@ -76,9 +80,9 @@ def scrape_and_send_email():
         return
 
     # Componha o e-mail
-
     subject = "Relatório Diário de Livros da Amazon"
-    body = "Livros em Oferta:\n" + "\n".join(offer_books)
+    # Formata cada tupla da lista `books` para uma string e junta todas no corpo do email
+    body = "Livros em Oferta:\n" + "\n".join([f"{title}\n {discount_price} -> {original_price}" for title, discount_price, original_price in books])
     msg = MIMEMultipart()
     msg['From'] = sender_email
     msg['To'] = receiver_email
@@ -96,7 +100,7 @@ def scrape_and_send_email():
         print("Erro ao enviar o e-mail:", e)
 
 # Horário para a execução do scraping e envio do e-mail uma vez por dia
-schedule.every().day.at("12:00").do(scrape_and_send_email)
+schedule.every().day.at("15:37").do(scrape_and_send_email)
 
 # Loop que mantém o script rodando
 while True:
