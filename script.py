@@ -9,6 +9,7 @@ import schedule
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -23,50 +24,39 @@ sys.stdout.reconfigure(encoding='utf-8')
 
 # Helper function to initialize the WebDriver
 def setup_driver():
-    service = Service("C:/chromedriver.exe")
     options = webdriver.ChromeOptions()
-    options.add_argument("--headless")
-    try:
-        driver = webdriver.Chrome(service=service, options=options)
-        logging.info("WebDriver initialized successfully.")
-        return driver
-    except Exception as e:
-        logging.error(f"Error initializing WebDriver: {e}")
-        sys.exit(1)
+    options.add_argument("--headless")  # Run without UI
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+
+    # Automatically install and use the correct ChromeDriver version
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
+    
+    return driver
 
 # Helper function for scraping data
 def scrape_books(driver, url):
     driver.get(url)
     try:
-        # Espera os elementos carregarem
         WebDriverWait(driver, 10).until(EC.presence_of_all_elements_located((By.CLASS_NAME, 'a-offscreen')))
         html = driver.page_source
         soup = BeautifulSoup(html, 'html.parser')
 
-        # Coleta todos os elementos com a classe 'a-offscreen'
-        elements = [elem.get_text(strip=True) for elem in soup.find_all('span', class_='a-offscreen')]
+        # Extract book titles
+        titles = [elem.get_text(strip=True) for elem in soup.find_all('span', class_='a-size-medium')]
 
-        # Remove o primeiro elemento (título da seção)
-        elements = elements[1:]
+        # Extract prices
+        prices = [elem.get_text(strip=True) for elem in soup.find_all('span', class_='a-offscreen')]
 
-        # Verifica se o número de elementos é múltiplo de 3 (título, preço com desconto, preço original)
-        if len(elements) % 3 != 0:
-            logging.warning("Número inesperado de elementos. Verifique se a estrutura da página mudou.")
-            return []
-
-        # Agrupa os elementos em trios (título, preço com desconto, preço original)
         books = []
-        for i in range(0, len(elements), 3):
-            title = elements[i]
-            discount_price = elements[i + 1]
-            original_price = elements[i + 2]
+        for i in range(min(len(titles), len(prices) - 1)):  # Ensure proper matching
+            title = titles[i]
+            discount_price = prices[i]
+            original_price = prices[i + 1]
 
-            # Validação para evitar entradas incorretas
-            if title and discount_price and original_price:
-                books.append((title, discount_price, original_price))
-                print(f"Título: {title}\nPreço com Desconto: {discount_price}\nPreço Original: {original_price}\n")
-            else:
-                logging.warning("Ignorando entrada devido a dados ausentes ou incorretos.")
+            books.append((title, discount_price, original_price))
+            print(f"Título: {title}\nPreço com Desconto: {discount_price}\nPreço Original: {original_price}\n")
 
         return books
     except Exception as e:
@@ -74,6 +64,7 @@ def scrape_books(driver, url):
         return []
     finally:
         driver.quit()
+
 
 # Helper function to save CSV
 def save_to_csv(books, folder_path):
@@ -111,6 +102,7 @@ def send_email(file_path, sender_email, receiver_email, password):
 # Main function to run the scraping and email task
 def scrape_and_send_email():
     url = "https://www.amazon.com.br/Livros/"
+    print("hi")
     driver = setup_driver()
     books = scrape_books(driver, url)
 
@@ -131,7 +123,7 @@ def scrape_and_send_email():
             logging.error(f"Error reading credentials: {e}")
 
 def main():
-    schedule.every().day.at("22:30").do(scrape_and_send_email)
+    schedule.every().day.at("00:56").do(scrape_and_send_email)
     while True:
         schedule.run_pending()
         time.sleep(60)
